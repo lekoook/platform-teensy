@@ -21,7 +21,12 @@ from SCons.Script import DefaultEnvironment
 env = DefaultEnvironment()
 
 env.Append(
-    ASFLAGS=["-x", "assembler-with-cpp"],
+    ASFLAGS=[
+        "-mthumb",
+    ],
+    ASPPFLAGS=[
+        "-x", "assembler-with-cpp",
+    ],
 
     CCFLAGS=[
         "-Os",  # optimize for size
@@ -29,8 +34,7 @@ env.Append(
         "-ffunction-sections",  # place each function in its own section
         "-fdata-sections",
         "-mthumb",
-        "-nostdlib",
-        "-fsingle-precision-constant"
+        "-nostdlib"
     ],
 
     CXXFLAGS=[
@@ -51,8 +55,7 @@ env.Append(
         "-Os",
         "-Wl,--gc-sections,--relax",
         "-mthumb",
-        "-Wl,--defsym=__rtc_localtime=$UNIX_TIME",
-        "-fsingle-precision-constant"
+        "-Wl,--defsym=__rtc_localtime=$UNIX_TIME"
     ],
 
     LIBS=["m", "stdc++"]
@@ -60,11 +63,14 @@ env.Append(
 
 if env.BoardConfig().id_ in ("teensy35", "teensy36"):
     env.Append(
+        ASFLAGS=[
+            "-mfloat-abi=hard",
+            "-mfpu=fpv4-sp-d16"
+        ],
         CCFLAGS=[
             "-mfloat-abi=hard",
             "-mfpu=fpv4-sp-d16"
         ],
-
         LINKFLAGS=[
             "-mfloat-abi=hard",
             "-mfpu=fpv4-sp-d16"
@@ -73,6 +79,9 @@ if env.BoardConfig().id_ in ("teensy35", "teensy36"):
 
 if "BOARD" in env:
     env.Append(
+        ASFLAGS=[
+            "-mcpu=%s" % env.BoardConfig().get("build.cpu")
+        ],
         CCFLAGS=[
             "-mcpu=%s" % env.BoardConfig().get("build.cpu")
         ],
@@ -81,5 +90,16 @@ if "BOARD" in env:
         ]
     )
 
-# copy CCFLAGS to ASFLAGS (-x assembler-with-cpp mode)
-env.Append(ASFLAGS=env.get("CCFLAGS", [])[:])
+if env.BoardConfig().get("build.core", "") != "teensy4":
+    env.Append(
+        ASFLAGS=[
+            "-mno-unaligned-access",
+        ],
+        CCFLAGS=[
+            "-mno-unaligned-access",
+            "-fsingle-precision-constant"
+        ],
+        LINKFLAGS=[
+            "-fsingle-precision-constant"
+        ]
+    )

@@ -1,16 +1,13 @@
 {
   "build": {
     "arduino": {
-      "ldscript": "imxrt1062_t41.ld"
+      "ldscript": "imxrt1062_mm.ld"
     },
     "core": "teensy4",
     "cpu": "cortex-m7",
-    "extra_flags": "-D__IMXRT1062__ -DARDUINO_TEENSY41",
+    "extra_flags": "-D__IMXRT1062__ -DARDUINO_TEENSY_MICROMOD",
     "f_cpu": "600000000",
-    "mcu": "imxrt1062",
-    "zephyr": {
-        "variant": "teensy41"
-    }
+    "mcu": "imxrt1062"
   },
   "connectivity": [
     "can"
@@ -19,10 +16,9 @@
     "jlink_device": "MIMXRT1062xxxxA"
   },
   "frameworks": [
-    "arduino",
-    "zephyr"
+    "arduino"
   ],
-  "name": "Teensy 4.1",
+  "name": "SparkFun MicroMod Teensy",
   "upload": {
     "maximum_ram_size": 524288,
     "maximum_size": 8126464,
@@ -33,6 +29,6 @@
       "jlink"
     ]
   },
-  "url": "https://www.pjrc.com/store/teensy41.html",
-  "vendor": "Teensy"
+  "url": "https://www.sparkfun.com/products/16402",
+  "vendor": "SparkFun"
 }

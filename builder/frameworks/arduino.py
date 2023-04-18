@@ -61,12 +61,13 @@ BUILTIN_USB_FLAGS = (
     "USB_FLIGHTSIM_JOYSTICK",
     "USB_EVERYTHING",
     "USB_DISABLED",
+    "USB_MTPDISK_SERIAL"
 )
 if not set(env.get("CPPDEFINES", [])) & set(BUILTIN_USB_FLAGS):
     env.Append(CPPDEFINES=["USB_SERIAL"])
 
 env.Replace(
-    SIZEPROGREGEXP=r"^(?:\.text|\.text\.progmem|\.text\.itcm|\.data)\s+([0-9]+).*",
+    SIZEPROGREGEXP=r"^(?:\.text|\.text\.progmem|\.text\.itcm|\.data|\.text\.csf)\s+([0-9]+).*",
     SIZEDATAREGEXP=r"^(?:\.usbdescriptortable|\.dmabuffers|\.usbbuffers|\.data|\.bss|\.noinit|\.text\.itcm|\.text\.itcm\.padding)\s+([0-9]+).*"
 )
 
@@ -88,7 +89,12 @@ env.Append(
 
 if "BOARD" in env and BUILD_CORE == "teensy":
     env.Append(
-        ASFLAGS=["-x", "assembler-with-cpp"],
+        ASFLAGS=[
+            "-mmcu=$BOARD_MCU"
+        ],
+        ASPPFLAGS=[
+            "-x", "assembler-with-cpp",
+        ],
 
         CCFLAGS=[
             "-Os",  # optimize for size
@@ -125,7 +131,13 @@ elif "BOARD" in env and BUILD_CORE in ("teensy3", "teensy4"):
     )
 
     env.Append(
-        ASFLAGS=["-x", "assembler-with-cpp"],
+        ASFLAGS=[
+            "-mthumb",
+            "-mcpu=%s" % env.BoardConfig().get("build.cpu"),
+        ],
+        ASPPFLAGS=[
+            "-x", "assembler-with-cpp",
+        ],
 
         CCFLAGS=[
             "-Wall",  # show warnings
@@ -133,8 +145,7 @@ elif "BOARD" in env and BUILD_CORE in ("teensy3", "teensy4"):
             "-fdata-sections",
             "-mthumb",
             "-mcpu=%s" % env.BoardConfig().get("build.cpu"),
-            "-nostdlib",
-            "-fsingle-precision-constant"
+            "-nostdlib"
         ],
 
         CXXFLAGS=[
@@ -157,8 +168,7 @@ elif "BOARD" in env and BUILD_CORE in ("teensy3", "teensy4"):
             "-Wl,--gc-sections,--relax",
             "-mthumb",
             "-mcpu=%s" % env.BoardConfig().get("build.cpu"),
-            "-Wl,--defsym=__rtc_localtime=$UNIX_TIME",
-            "-fsingle-precision-constant"
+            "-Wl,--defsym=__rtc_localtime=$UNIX_TIME"
         ],
 
         LIBS=["m", "stdc++"]
@@ -167,17 +177,27 @@ elif "BOARD" in env and BUILD_CORE in ("teensy3", "teensy4"):
     if not env.BoardConfig().get("build.ldscript", ""):
         env.Replace(LDSCRIPT_PATH=env.BoardConfig().get("build.arduino.ldscript", ""))
 
-    if env.BoardConfig().id_ in ("teensy35", "teensy36", "teensy40", "teensy41"):
+    if env.BoardConfig().id_ in (
+        "teensy35",
+        "teensy36",
+        "teensy40",
+        "teensy41",
+        "teensymm",
+    ):
         fpv_version = "4-sp"
-        if env.BoardConfig().id_.startswith("teensy4"):
+        if env.BoardConfig().id_.startswith(("teensy4", "teensymm")):
             fpv_version = "5"
+            env.Append(CXXFLAGS=["-fno-threadsafe-statics"])
 
         env.Append(
+            ASFLAGS=[
+                "-mfloat-abi=hard",
+                "-mfpu=fpv%s-d16" % fpv_version
+            ],
             CCFLAGS=[
                 "-mfloat-abi=hard",
                 "-mfpu=fpv%s-d16" % fpv_version
             ],
-
             LINKFLAGS=[
                 "-mfloat-abi=hard",
                 "-mfpu=fpv%s-d16" % fpv_version
@@ -262,23 +282,35 @@ elif "BOARD" in env and BUILD_CORE in ("teensy3", "teensy4"):
                 LINKFLAGS=["-O2"]
             )
 
-env.Append(
-    ASFLAGS=env.get("CCFLAGS", [])[:]
-)
 
-if "cortex-m" in env.BoardConfig().get("build.cpu", ""):
+cpu = env.BoardConfig().get("build.cpu", "")
+if "cortex-m" in cpu:
     board = env.subst("$BOARD")
     math_lib = "arm_cortex%s_math"
     if board in ("teensy35", "teensy36"):
         math_lib = math_lib % "M4lf"
     elif board in ("teensy30", "teensy31"):
         math_lib = math_lib % "M4l"
-    elif board.startswith("teensy4"):
+    elif board.startswith(("teensy4", "teensymm")):
         math_lib = math_lib % "M7lfsp"
     else:
         math_lib = math_lib % "M0l"
 
     env.Prepend(LIBS=[math_lib])
+
+    if cpu.startswith(("cortex-m4", "cortex-m0")):
+        env.Append(
+            ASFLAGS=[
+                "-mno-unaligned-access",
+            ],
+            CCFLAGS=[
+                "-mno-unaligned-access",
+                "-fsingle-precision-constant"
+            ],
+            LINKFLAGS=[
+                "-fsingle-precision-constant"
+            ]
+        )
 
 # Teensy 2.x Core
 if BUILD_CORE == "teensy":
@@ -324,7 +356,8 @@ if "build.variant" in env.BoardConfig():
 
 libs.append(env.BuildLibrary(
     join("$BUILD_DIR", "FrameworkArduino"),
-    join(FRAMEWORK_DIR, "cores", BUILD_CORE)
+    join(FRAMEWORK_DIR, "cores", BUILD_CORE),
+    src_filter="+<*> -<Blink.cc>"
 ))
 
 env.Prepend(LIBS=libs)

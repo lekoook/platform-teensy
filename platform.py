@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from platform import system
+import sys
 
-from platformio.managers.platform import PlatformBase
+from platformio.public import PlatformBase
+
+
+IS_WINDOWS = sys.platform.startswith("win")
 
 
 class TeensyPlatform(PlatformBase):
@@ -28,9 +31,21 @@ class TeensyPlatform(PlatformBase):
             if del_toolchain in self.packages:
                 del self.packages[del_toolchain]
 
-        if "mbed" in variables.get("pioframework", []):
-            self.packages["toolchain-gccarmnoneeabi"][
-                'version'] = ">=1.60301.0,<1.80000.0"
+        frameworks = variables.get("pioframework", [])
+        if "arduino" in frameworks:
+            self.packages.pop("toolchain-gccarmnoneeabi", None)
+        else:
+            self.packages["toolchain-gccarmnoneeabi"]["optional"] = False
+            self.packages.pop("toolchain-gccarmnoneeabi-teensy", None)
+
+        if "zephyr" in frameworks:
+            for p in self.packages:
+                if p in ("tool-cmake", "tool-dtc", "tool-ninja"):
+                    self.packages[p]["optional"] = False
+            if not IS_WINDOWS:
+                self.packages["tool-gperf"]["optional"] = False
+        elif "arduino" in frameworks and board_config.get("build.core", "") == "teensy4":
+            self.packages["tool-teensy"]["optional"] = False
 
         # configure J-LINK tool
         jlink_conds = [
@@ -47,17 +62,16 @@ class TeensyPlatform(PlatformBase):
         if not any(jlink_conds) and jlink_pkgname in self.packages:
             del self.packages[jlink_pkgname]
 
-        return PlatformBase.configure_default_packages(
-            self, variables, targets)
+        return super().configure_default_packages(variables, targets)
 
     def get_boards(self, id_=None):
-        result = PlatformBase.get_boards(self, id_)
+        result = super().get_boards(id_)
         if not result:
             return result
         if id_:
             return self._add_default_debug_tools(result)
         else:
-            for key, value in result.items():
+            for key in result:
                 result[key] = self._add_default_debug_tools(result[key])
         return result
 
@@ -66,12 +80,12 @@ class TeensyPlatform(PlatformBase):
         upload_protocols = board.manifest.get("upload", {}).get(
             "protocols", [])
         if "tools" not in debug:
-            debug['tools'] = {}
+            debug["tools"] = {}
 
-        if "jlink" in upload_protocols and "jlink" not in debug['tools']:
+        if "jlink" in upload_protocols and "jlink" not in debug["tools"]:
             assert debug.get("jlink_device"), (
                 "Missed J-Link Device ID for %s" % board.id)
-            debug['tools']['jlink'] = {
+            debug["tools"]["jlink"] = {
                 "server": {
                     "package": "tool-jlink",
                     "arguments": [
@@ -82,10 +96,17 @@ class TeensyPlatform(PlatformBase):
                         "-port", "2331"
                     ],
                     "executable": ("JLinkGDBServerCL.exe"
-                                   if system() == "Windows" else
+                                   if IS_WINDOWS else
                                    "JLinkGDBServer")
                 }
             }
 
-        board.manifest['debug'] = debug
+        board.manifest["debug"] = debug
         return board
+
+    def configure_debug_session(self, debug_config):
+        if debug_config.speed:
+            if "jlink" in (debug_config.server or {}).get("executable", "").lower():
+                debug_config.server["arguments"].extend(
+                    ["-speed", debug_config.speed]
+                )
